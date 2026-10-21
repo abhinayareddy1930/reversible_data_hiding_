@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Attention-Guided RDH — Brain MRI</title>
+<style>
+/* ═══ RESET & THEME ════════════════════════════════════════════════ */
+:root{
+  --bg:#0d1117;--surf:#161b22;--surf2:#1c2128;--border:#30363d;
+  --blue:#1f6feb;--green:#238636;--red:#da3633;--orange:#e3a847;
+  --text:#e6edf3;--muted:#8b949e;--r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh}
+a{color:var(--blue)}
+
+/* ═══ HEADER ════════════════════════════════════════════════════════ */
+header{
+  background:var(--surf);border-bottom:1px solid var(--border);
+  padding:15px 36px;display:flex;align-items:center;gap:14px;
+}
+.logo{font-size:28px}
+.htext h1{font-size:1.15rem;font-weight:700}
+.htext p{font-size:.73rem;color:var(--muted);margin-top:2px}
+.badge{
+  margin-left:auto;background:#0d2116;border:1px solid var(--green);
+  color:#58a65c;padding:4px 12px;border-radius:20px;font-size:.7rem;font-weight:700;
+}
+
+/* ═══ TABS ══════════════════════════════════════════════════════════ */
+.tabs{display:flex;gap:5px;padding:20px 36px 0;border-bottom:1px solid var(--border)}
+.tb{
+  padding:9px 22px;border-radius:8px 8px 0 0;border:1px solid var(--border);
+  border-bottom:none;background:var(--surf);color:var(--muted);
+  cursor:pointer;font-size:.88rem;transition:all .18s;
+}
+.tb.active{background:var(--blue);border-color:var(--blue);color:#fff}
+.tp{display:none;padding:22px 36px 40px}.tp.active{display:block}
+
+/* ═══ LAYOUT ════════════════════════════════════════════════════════ */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.g5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:860px){.g2,.g3,.g5{grid-template-columns:1fr}}
+
+/* ═══ CARD ══════════════════════════════════════════════════════════ */
+.card{
+  background:var(--surf);border:1px solid var(--border);
+  border-radius:var(--r);padding:18px;margin-bottom:16px;
+}
+.card-title{font-size:.93rem;font-weight:600;margin-bottom:13px;display:flex;align-items:center;gap:7px}
+
+/* ═══ FORM ══════════════════════════════════════════════════════════ */
+label{font-size:.77rem;color:var(--muted);display:block;margin-bottom:5px}
+textarea{
+  width:100%;padding:10px 12px;border-radius:6px;border:1px solid var(--border);
+  background:#0d1117;color:var(--text);font-size:.81rem;
+  font-family:'Consolas',monospace;resize:vertical;min-height:130px;line-height:1.55;
+}
+input[type=range]{width:100%;accent-color:var(--blue);cursor:pointer}
+.sl-row{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+.sl-row input{flex:1}
+.sl-val{min-width:38px;text-align:right;font-weight:700;color:var(--blue);font-size:.9rem}
+
+/* ═══ BUTTONS ═══════════════════════════════════════════════════════ */
+.btn{
+  padding:10px 22px;border-radius:6px;border:none;cursor:pointer;
+  font-size:.88rem;font-weight:600;transition:opacity .18s;
+}
+.btn:hover{opacity:.84}.btn:disabled{opacity:.38;cursor:not-allowed}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-success{background:var(--green);color:#fff}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text)}
+.btn-sm{padding:6px 13px;font-size:.77rem}
+.btn-block{width:100%;padding:13px}
+
+/* ═══ DROP ZONE ══════════════════════════════════════════════════════ */
+.dz{
+  border:2px dashed var(--border);border-radius:var(--r);
+  padding:28px 16px;text-align:center;cursor:pointer;
+  color:var(--muted);font-size:.83rem;min-height:120px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  transition:border-color .18s,background .18s;
+}
+.dz:hover,.dz.over{border-color:var(--blue);background:#111c2d}
+.dz img{max-height:180px;border-radius:6px}
+.dz-icon{font-size:2rem}
+.dz small{font-size:.72rem}
+
+/* ═══ IMAGE PANEL ════════════════════════════════════════════════════ */
+.ip{text-align:center}
+.ip img{width:100%;border-radius:6px;border:1px solid var(--border)}
+.ip p{font-size:.71rem;color:var(--muted);margin-top:5px}
+
+/* ═══ METRIC BOX ═════════════════════════════════════════════════════ */
+.mbox{
+  background:#0d1117;border:1px solid var(--border);
+  border-radius:8px;padding:12px 8px;text-align:center;
+}
+.mbox .v{font-size:1.35rem;font-weight:700;color:var(--blue)}
+.mbox .l{font-size:.67rem;color:var(--muted);margin-top:3px}
+.mbox.green .v{color:#58a65c}
+.mbox.orange .v{color:var(--orange)}
+.mbox.red .v{color:var(--red)}
+
+/* ═══ CAPACITY BAR ═══════════════════════════════════════════════════ */
+.cap-wrap{background:#0d1117;border-radius:6px;height:10px;overflow:hidden}
+.cap-bar{height:100%;background:var(--blue);border-radius:6px;transition:width .4s}
+
+/* ═══ TIER LEGEND ════════════════════════════════════════════════════ */
+.tier-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.75rem}
+.tl-dot{width:12px;height:12px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:middle}
+
+/* ═══ ALERTS ════════════════════════════════════════════════════════ */
+.alert{padding:10px 14px;border-radius:6px;font-size:.82rem;margin-bottom:12px;display:none}
+.alert.show{display:block}
+.a-ok{background:#0d2116;border:1px solid var(--green);color:#58a65c}
+.a-err{background:#2e1a1a;border:1px solid var(--red);color:#f97}
+.a-info{background:#111e30;border:1px solid var(--blue);color:#79c0ff}
+
+/* ═══ SPINNER ════════════════════════════════════════════════════════ */
+.spin{
+  width:22px;height:22px;border:3px solid var(--border);
+  border-top-color:var(--blue);border-radius:50%;
+  animation:sp .7s linear infinite;display:inline-block;
+}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ld-row{display:none;align-items:center;gap:10px;color:var(--muted);font-size:.83rem;margin-top:10px}
+.ld-row.show{display:flex}
+
+/* ═══ TEXT OUTPUT ════════════════════════════════════════════════════ */
+.txt-out{
+  background:#0d1117;border:1px solid var(--border);border-radius:6px;
+  padding:12px;font-family:'Consolas',monospace;font-size:.79rem;
+  color:#79c0ff;white-space:pre-wrap;max-height:300px;
+  overflow-y:auto;min-height:60px;line-height:1.55;
+}
+
+/* ═══ ABOUT TABLE ════════════════════════════════════════════════════ */
+.at{width:100%;border-collapse:collapse;font-size:.82rem;margin:12px 0}
+.at th{padding:8px;text-align:left;color:var(--muted);border-bottom:1px solid var(--border)}
+.at td{padding:8px;border-bottom:1px solid #1e252e}
+.tag-g{color:#58a65c;font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <span class="logo">🧠</span>
+  <div class="htext">
+    <h1>Attention-Guided Reversible Data Hiding</h1>
+  </div>
+  <span class="badge">RDH</span>
+</header>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tb active" onclick="switchTab('embed')"> Embed</button>
+  <button class="tb" onclick="switchTab('extract')"> Extract</button>
+  <!-- <button class="tb" onclick="switchTab('capacity')"> Capacity</button> -->
+  <button class="tb" onclick="switchTab('about')"> About</button>
+</div>
+
+<!-- ══════════════════════ EMBED TAB ════════════════════════════════ -->
+<div id="tab-embed" class="tp active">
+<div class="g2">
+
+  <!-- LEFT: inputs -->
+  <div>
+    <div class="card">
+      <div class="card-title">Upload Brain MRI</div>
+      <div class="dz" id="dz-e" onclick="pick('fi-e')"
+           ondragover="dzo(event,'dz-e')" ondragleave="dzl('dz-e')" ondrop="dzd(event,'dz-e','e')">
+        <span class="dz-icon">⬆</span>
+        <span>Click or drag a brain MRI image here</span>
+        <small>PNG / JPG · Resized to 224×224 internally</small>
+      </div>
+      <input type="file" id="fi-e" accept="image/*" style="display:none" onchange="fc(event,'dz-e','e')"/>
+    </div>
+
+    <div class="card">
+      <div class="card-title"> Patient Data to Hide</div>
+      <label>Secret text (patient records, diagnosis, metadata…)</label>
+      <textarea id="txt-e" oninput="cc()" placeholder="Enter patient data here…
+
+Example:
+PATIENT ID: BR-2026-001
+Name: John Doe
+Diagnosis: Grade-II Glioma
+Tumour: 2.3cm × 1.8cm, left temporal lobe
+Radiologist: Dr. A. Sharma"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="loadSample()">Load sample data </button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('txt-e').value='';cc()">Clear</button>
+      </div>
+      <div style="font-size:.73rem;color:var(--muted);margin-top:7px" id="cc-lbl">0 chars · 0 bits</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Attention Tiers (T1, T2)</div>
+      <label>T1 — Tier 1 / Tier 2 boundary (3-bit / 2-bit)</label>
+      <div class="sl-row">
+        <input type="range" id="sl-t1" min="0.1" max="0.5" step="0.01" value="0.33"
+               oninput="slv('sl-t1','sv-t1')"/>
+        <span class="sl-val" id="sv-t1">0.33</span>
+      </div>
+      <label style="margin-top:10px">T2 — Tier 2 / Tier 3 boundary (2-bit / 1-bit)</label>
+      <div class="sl-row">
+        <input type="range" id="sl-t2" min="0.5" max="0.9" step="0.01" value="0.66"
+               oninput="slv('sl-t2','sv-t2')"/>
+        <span class="sl-val" id="sv-t2">0.66</span>
+      </div>
+      <div class="tier-legend" style="margin-top:10px">
+        <span><span class="tl-dot" style="background:#ff5050"></span>Tier 1 (attn &lt; T1): 3 LSBs — most data, lowest attention</span>
+        <span><span class="tl-dot" style="background:#ffc832"></span>Tier 2 (T1–T2): 2 LSBs</span>
+        <span><span class="tl-dot" style="background:#50c850"></span>Tier 3 (attn &gt; T2): 1 LSB — least distortion</span>
+      </div>
+    </div>
+
+    <button class="btn btn-success btn-block" id="btn-e" onclick="doEmbed()">
+       Embed Data into MRI
+    </button>
+    <div class="ld-row" id="ld-e"><span class="spin"></span> Processing… (~15s on CPU)</div>
+  </div>
+
+  <!-- RIGHT: outputs -->
+  <div>
+    <div class="alert a-err" id="al-e-err"></div>
+    <div class="alert a-ok"  id="al-e-ok"></div>
+
+    <div id="embed-out" style="display:none">
+
+      <!-- 5 metrics -->
+      <div class="g5" style="margin-bottom:16px">
+        <div class="mbox green"><div class="v" id="m-psnr">—</div><div class="l">PSNR (dB)</div></div>
+        <div class="mbox green"><div class="v" id="m-ssim">—</div><div class="l">SSIM</div></div>
+        <div class="mbox orange"><div class="v" id="m-cnr">—</div><div class="l">CNR</div></div>
+        <div class="mbox" id="mos-box"><div class="v" id="m-mos">—</div><div class="l">MOS </div></div>
+        <div class="mbox" id="rce-box"><div class="v" id="m-rce">—</div><div class="l">RCE (px)</div></div>
+      </div>
+
+      <!-- Capacity bar -->
+      <div class="card" style="padding:14px">
+        <div style="display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:5px">
+          <span>Embedding usage</span><span id="cap-lbl"></span>
+        </div>
+        <div class="cap-wrap"><div class="cap-bar" id="cap-bar" style="width:0%"></div></div>
+        <div style="font-size:.71rem;color:var(--muted);margin-top:6px" id="cap-detail"></div>
+      </div>
+
+      <!-- Image grid: 2 rows × 2 -->
+      <div class="card">
+        <div class="card-title"> Visual Results</div>
+        <div class="g2" style="margin-bottom:12px">
+          <div class="ip"><img id="o-img" src="" alt=""/><p>Original MRI</p></div>
+          <div class="ip"><img id="seg-img" src="" alt=""/><p>Segmented Image</p></div>
+        </div>
+        <div class="g2">
+          <div class="ip"><img id="a-img" src="" alt=""/><p>Attention Map</p></div>
+          <div class="ip"><img id="s-img" src="" alt=""/><p>Stego Image</p></div>
+        </div>
+      </div>
+
+      <!-- Text verified -->
+      <!-- <div class="card" id="tv-card" style="padding:12px">
+        <span id="tv-label" style="font-size:.85rem"></span>
+      </div> -->
+
+      <!-- Downloads -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">
+        <button class="btn btn-primary" onclick="dlStego()">⬇ Download Stego Image</button>
+        <button class="btn btn-outline" onclick="dlSideInfo()">⬇ Download side_info.json </button>
+      </div>
+      <div class="alert a-info show" style="margin-top:10px;font-size:.78rem">
+         Save <strong>side_info.json</strong> together with the stego image.
+
+      </div>
+    </div>
+  </div>
+
+</div>
+</div><!-- /embed -->
+
+
+<!-- ══════════════════════ EXTRACT TAB ══════════════════════════════ -->
+<div id="tab-extract" class="tp">
+<div class="g2">
+
+  <div>
+    <div class="card">
+      <div class="card-title">Upload Stego MRI Image</div>
+      <div class="dz" id="dz-x" onclick="pick('fi-x')"
+           ondragover="dzo(event,'dz-x')" ondragleave="dzl('dz-x')" ondrop="dzd(event,'dz-x','x')">
+        <span class="dz-icon">⬆</span>
+        <span>Drop the stego image here</span>
+        <small>Must be an image embedded by this system</small>
+      </div>
+      <input type="file" id="fi-x" accept="image/*" style="display:none" onchange="fc(event,'dz-x','x')"/>
+    </div>
+
+    <div class="card">
+      <div class="card-title"> Upload side_info.json</div>
+      <div class="dz" id="dz-si" onclick="pick('fi-si')"
+           ondragover="dzo(event,'dz-si')" ondragleave="dzl('dz-si')" ondrop="dzd_json(event,'dz-si')">
+        <span class="dz-icon"></span>
+        <span>Drop side_info.json here</span>
+        <small>Downloaded after embedding</small>
+      </div>
+      <input type="file" id="fi-si" accept=".json,application/json" style="display:none"
+             onchange="fc_json(event,'dz-si')"/>
+      <div style="font-size:.73rem;color:var(--muted);margin-top:7px" id="si-status">No file loaded</div>
+    </div>
+
+    <div class="alert a-info show" style="margin-bottom:12px;font-size:.78rem">
+      ℹ Both the stego image and side_info.json are required to extract data.
+      No model inference needed — extraction is purely from the embed log.
+    </div>
+
+    <button class="btn btn-primary btn-block" id="btn-x" onclick="doExtract()">
+       Extract Hidden Data
+    </button>
+    <div class="ld-row" id="ld-x"><span class="spin"></span> Extracting…</div>
+  </div>
+
+  <div>
+    <div class="alert a-err" id="al-x-err"></div>
+    <div class="alert a-ok"  id="al-x-ok"></div>
+
+    <div id="extract-out" style="display:none">
+      <div class="card">
+        <div class="card-title"> Extracted Patient Data</div>
+        <div class="txt-out" id="x-txt">—</div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="copyTxt()"> Copy</button>
+          <button class="btn btn-outline btn-sm" onclick="dlTxt()">⬇ Download .txt</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:7px" id="x-meta"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"> Image Recovery</div>
+        <div class="g2">
+          <div class="ip"><img id="xs-img" src="" alt=""/><p>Stego Input</p></div>
+          <div class="ip"><img id="xr-img" src="" alt=""/><p>Recovered Original (pixel-perfect)</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div><!-- /extract -->
+
+
+<!-- ══════════════════════ CAPACITY TAB ══════════════════════════════ -->
+<div id="tab-capacity" class="tp">
+<div class="g2">
+  <div>
+    <div class="card">
+      <div class="card-title">📐 Capacity Analyser</div>
+      <div class="dz" id="dz-c" onclick="pick('fi-c')"
+           ondragover="dzo(event,'dz-c')" ondragleave="dzl('dz-c')" ondrop="dzd(event,'dz-c','c')">
+        <span class="dz-icon">⬆️</span><span>Upload MRI to analyse</span>
+      </div>
+      <input type="file" id="fi-c" accept="image/*" style="display:none" onchange="fc(event,'dz-c','c')"/>
+      <div style="margin-top:14px">
+        <label>T1 (3-bit/2-bit boundary)</label>
+        <div class="sl-row">
+          <input type="range" id="sl-ct1" min="0.1" max="0.5" step="0.01" value="0.33"
+                 oninput="slv('sl-ct1','sv-ct1')"/>
+          <span class="sl-val" id="sv-ct1">0.33</span>
+        </div>
+        <label style="margin-top:8px">T2 (2-bit/1-bit boundary)</label>
+        <div class="sl-row">
+          <input type="range" id="sl-ct2" min="0.5" max="0.9" step="0.01" value="0.66"
+                 oninput="slv('sl-ct2','sv-ct2')"/>
+          <span class="sl-val" id="sv-ct2">0.66</span>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:14px" onclick="doCap()">
+        🔍 Analyse Capacity
+      </button>
+    </div>
+  </div>
+
+  <div>
+    <div id="cap-out" style="display:none">
+      <div class="card">
+        <div class="card-title">📊 Capacity Breakdown</div>
+        <div class="g3" style="margin-bottom:14px">
+          <div class="mbox green"><div class="v" id="c-t1b">—</div><div class="l">Tier 1 bits<br><small>(3-bit px)</small></div></div>
+          <div class="mbox orange"><div class="v" id="c-t2b">—</div><div class="l">Tier 2 bits<br><small>(2-bit px)</small></div></div>
+          <div class="mbox"><div class="v" id="c-t3b">—</div><div class="l">Tier 3 bits<br><small>(1-bit px)</small></div></div>
+        </div>
+        <div class="g2" style="margin-bottom:14px">
+          <div class="mbox green"><div class="v" id="c-total">—</div><div class="l">Total capacity (bits)</div></div>
+          <div class="mbox green"><div class="v" id="c-chars">—</div><div class="l">Total capacity (chars)</div></div>
+        </div>
+        <div style="padding:10px;background:#0d1117;border-radius:6px;font-size:.83rem" id="c-status"></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div><!-- /capacity -->
+
+
+<!-- ══════════════════════ ABOUT TAB ════════════════════════════════ -->
+<div id="tab-about" class="tp">
+<div class="card" style="max-width:820px;margin:0 auto">
+  <div class="card-title"> About RDH</div>
+  <p style="line-height:1.8;font-size:.87rem;color:#cdd9e5;margin-bottom:16px">
+    <strong>Attention-Guided Reversible Data Hiding (T-RDH)</strong> combines ViT-based brain
+    segmentation with 3-tier multi-LSB substitution to embed large patient records into brain
+    MRI images with zero diagnostic distortion and pixel-perfect recovery.
+  </p>
+
+  <h3 style="margin-bottom:8px;font-size:.93rem">Embedding Algorithm</h3>
+  <ol style="margin-left:18px;line-height:2;font-size:.84rem;color:#cdd9e5;margin-bottom:16px">
+    <li>ViT forward pass → brain segmentation mask + CLS-attention map (224×224)</li>
+    <li>Otsu + morphological closing → full brain ROI mask</li>
+    <li>Pixels sorted by ascending attention into 3 tiers:<br>
+      &nbsp;&nbsp;• Tier 1 (attn &lt; T1 = 0.33): 3 LSBs replaced — most data, safest region<br>
+      &nbsp;&nbsp;• Tier 2 (T1–T2): 2 LSBs replaced<br>
+      &nbsp;&nbsp;• Tier 3 (attn ≥ T2 = 0.66): 1 LSB replaced — minimal distortion</li>
+    <li>Original LSBs saved in <code>embed_log</code> → used to restore image perfectly</li>
+    <li>RCE = 0 guaranteed (pixel-perfect recovery using embed_log)</li>
+  </ol>
+
+  <h3 style="margin-bottom:8px;font-size:.93rem">Metrics</h3>
+  <table class="at">
+    <tr><th>Metric</th><th>Expected</th><th>Meaning</th></tr>
+    <tr><td>PSNR</td><td class="tag-g">≥ 38 dB</td><td>Pixel quality — higher is better</td></tr>
+    <tr><td>SSIM</td><td class="tag-g">≥ 0.97</td><td>Structural similarity [0,1]</td></tr>
+    <tr><td>CNR</td><td class="tag-g">≥ 1.0</td><td>Brain vs background contrast</td></tr>
+    <tr><td>MOS</td><td class="tag-g">4–5 / 5</td><td>Perceptual quality (ITU scale)</td></tr>
+    <tr><td>RCE</td><td class="tag-g">0 pixels</td><td>Diff after recovery — always 0 with embed_log</td></tr>
+  </table>
+
+  <h3 style="margin-bottom:8px;font-size:.93rem">Why RCE = 0</h3>
+  <p style="font-size:.83rem;color:#cdd9e5;background:#0d1117;padding:10px;border-radius:6px;
+     border-left:3px solid var(--green);margin-bottom:16px">
+    Each modified pixel's original k LSBs are saved in <code>embed_log</code>.
+    At extract time, those exact original bits are written back — making recovery
+    pixel-perfect regardless of message size or image content.
+  </p>
+
+  
+</div>
+</div><!-- /about -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<script>
+// ── STATE ──────────────────────────────────────────────────────────
+const S = {
+  e: { b64: null, stego: null, side_info: null },
+  x: { b64: null, side_info: null },
+  c: { b64: null },
+};
+
+// ── TABS ───────────────────────────────────────────────────────────
+function switchTab(n) {
+  const names = ['embed','extract','capacity','about'];
+  document.querySelectorAll('.tb').forEach((b,i) => b.classList.toggle('active', names[i]===n));
+  document.querySelectorAll('.tp').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+n).classList.add('active');
+}
+
+// ── DROPZONE ───────────────────────────────────────────────────────
+function pick(id){ document.getElementById(id).click() }
+function dzo(ev,id){ ev.preventDefault(); document.getElementById(id).classList.add('over') }
+function dzl(id){ document.getElementById(id).classList.remove('over') }
+function dzd(ev,id,key){ ev.preventDefault(); dzl(id); loadImg(ev.dataTransfer.files[0],id,key) }
+function fc(ev,id,key){ loadImg(ev.target.files[0],id,key) }
+
+function loadImg(file, id, key) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const b64 = ev.target.result.split(',')[1];
+    S[key].b64 = b64;
+    const dz = document.getElementById(id);
+    dz.innerHTML = `<img src="data:image/png;base64,${b64}" style="max-height:200px;border-radius:6px"/>`;
+  };
+  reader.readAsDataURL(file);
+}
+
+// JSON side_info upload
+function dzd_json(ev, id) {
+  ev.preventDefault(); dzl(id);
+  loadJson(ev.dataTransfer.files[0], id);
+}
+function fc_json(ev, id) { loadJson(ev.target.files[0], id) }
+
+function loadJson(file, id) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      S.x.side_info = JSON.parse(ev.target.result);
+      document.getElementById('dz-si').innerHTML =
+        `<span class="dz-icon">✅</span><span>${file.name}</span>` +
+        `<small>embed_log: ${S.x.side_info.embed_log.length.toLocaleString()} entries</small>`;
+      document.getElementById('si-status').textContent =
+        `Loaded: ${file.name} | ${S.x.side_info.total_bits.toLocaleString()} bits | T1=${S.x.side_info.T1} T2=${S.x.side_info.T2}`;
+    } catch(e) {
+      alert('Invalid JSON file: ' + e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ── SLIDER ─────────────────────────────────────────────────────────
+function slv(sid, vid) {
+  document.getElementById(vid).textContent =
+    parseFloat(document.getElementById(sid).value).toFixed(2);
+}
+
+// ── CHAR COUNT ─────────────────────────────────────────────────────
+function cc() {
+  const n = document.getElementById('txt-e').value.length;
+  document.getElementById('cc-lbl').textContent =
+    `${n.toLocaleString()} chars · ${(n*8).toLocaleString()} bits`;
+}
+
+// ── SAMPLE TEXT ────────────────────────────────────────────────────
+function loadSample() {
+  const base = `PATIENT RECORD — CONFIDENTIAL
+Patient ID   : BT-2026-00471
+Name         : John 
+DOB          : 14-Mar-1978
+Scan Date    : 06-Apr-2026
+Modality     : FLAIR MRI
+Institution  : Chaitanya Bharathi Institute of Technology, Hyderabad
+DIAGNOSIS
+Mild glioma detected in the left temporal lobe.
+Estimated tumour size: 2.3 cm × 1.8 cm.
+WHO Grade II — Low-grade glioma, no necrosis observed.
+RECOMMENDATION
+1. Neurosurgical consultation within 2 weeks.
+2. Follow-up contrast-enhanced MRI in 3 months.
+3. Neuropsychological evaluation recommended.
+4. No immediate surgical intervention at this stage.
+RADIOLOGIST NOTES
+The T2/FLAIR hyperintensity is confined to the cortical and sub-cortical
+regions of the left temporal lobe. No midline shift. Ventricles appear
+normal in size and configuration. No haemorrhage or mass effect detected.
+Cerebellum and brainstem are unremarkable.
+
+`;
+  document.getElementById('txt-e').value = base.repeat(3);
+  cc();
+}
+
+// ── ALERT ──────────────────────────────────────────────────────────
+function showAlert(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+}
+function hideAlert(id) { document.getElementById(id).classList.remove('show') }
+
+// ── EMBED ──────────────────────────────────────────────────────────
+async function doEmbed() {
+  hideAlert('al-e-err'); hideAlert('al-e-ok');
+  if (!S.e.b64) { showAlert('al-e-err','Upload a brain MRI image first.'); return }
+  const txt = document.getElementById('txt-e').value.trim();
+  if (!txt)    { showAlert('al-e-err','Enter secret text to embed.'); return }
+  const T1 = parseFloat(document.getElementById('sl-t1').value);
+  const T2 = parseFloat(document.getElementById('sl-t2').value);
+  if (T1 >= T2) { showAlert('al-e-err','T1 must be less than T2.'); return }
+
+  document.getElementById('btn-e').disabled = true;
+  document.getElementById('ld-e').classList.add('show');
+  document.getElementById('embed-out').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/embed', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ image: S.e.b64, secret_text: txt, T1, T2 })
+    });
+    const d = await resp.json();
+    if (d.status !== 'success') throw new Error(d.message);
+
+    // Save for download
+    S.e.stego     = d.stego_image;
+    S.e.side_info = d.side_info;
+
+    // Metrics
+    const m = d.metrics;
+    document.getElementById('m-psnr').textContent = m.PSNR === Infinity ? '∞' : m.PSNR.toFixed(2);
+    document.getElementById('m-ssim').textContent = m.SSIM.toFixed(4);
+    document.getElementById('m-cnr').textContent  = m.CNR.toFixed(3);
+    document.getElementById('m-mos').textContent  = `${m.MOS_score}/5\n${m.MOS_label}`;
+    document.getElementById('m-rce').textContent  = m.RCE_pixels;
+
+    const mosBox = document.getElementById('mos-box');
+    mosBox.className = 'mbox ' + (m.MOS_score >= 4 ? 'green' : m.MOS_score >= 3 ? 'orange' : 'red');
+    const rceBox = document.getElementById('rce-box');
+    rceBox.className = 'mbox ' + (m.RCE_pixels === 0 ? 'green' : 'red');
+
+    // Capacity bar
+    const c = d.capacity;
+    const pct = Math.min(100, (m.bits_embedded / c.total_bits) * 100);
+    document.getElementById('cap-bar').style.width = pct + '%';
+    document.getElementById('cap-lbl').textContent =
+      `${m.bits_embedded.toLocaleString()} / ${c.total_bits.toLocaleString()} bits (${pct.toFixed(1)}%)`;
+    document.getElementById('cap-detail').textContent =
+      `Tier1: ${c.tier1_bits.toLocaleString()} bits (${c.tier1_px.toLocaleString()} px) · ` +
+      `Tier2: ${c.tier2_bits.toLocaleString()} bits · ` +
+      `Tier3: ${c.tier3_bits.toLocaleString()} bits · BPP: ${m.BPP}`;
+
+    // Images
+    document.getElementById('o-img').src = `data:image/png;base64,${d.original_image}`;
+    document.getElementById('seg-img').src = `data:image/png;base64,${d.brain_mask}`;
+    document.getElementById('a-img').src = `data:image/png;base64,${d.attention_map}`;
+    document.getElementById('s-img').src = `data:image/png;base64,${d.stego_image}`;
+
+    // Text verify
+    const tvCard = document.getElementById('tv-card');
+    const tvLbl  = document.getElementById('tv-label');
+    if (tvCard && tvLbl) {
+      if (d.text_verified) {
+        tvCard.style.borderLeft = '3px solid #58a65c';
+        tvLbl.innerHTML = '✅ <strong>Text verified:</strong> Extracted text matches original exactly.';
+      } else {
+        tvCard.style.borderLeft = '3px solid #da3633';
+        tvLbl.innerHTML = '⚠️ <strong>Mismatch:</strong> Extracted text differs from original.';
+      }
+    }
+
+    document.getElementById('embed-out').style.display = 'block';
+    showAlert('al-e-ok',
+      `✅ Embedded ${m.bits_embedded.toLocaleString()} bits · ` +
+      `PSNR ${m.PSNR.toFixed(2)} dB · SSIM ${m.SSIM.toFixed(4)} · ` +
+      `MOS ${m.MOS_score}/5 (${m.MOS_label}) · RCE ${m.RCE_pixels} px`
+    );
+
+  } catch(e) {
+    showAlert('al-e-err', '❌ ' + e.message);
+  } finally {
+    document.getElementById('btn-e').disabled = false;
+    document.getElementById('ld-e').classList.remove('show');
+  }
+}
+
+function dlStego() {
+  if (!S.e.stego) return;
+  const a = document.createElement('a');
+  a.href = `data:image/png;base64,${S.e.stego}`;
+  a.download = 'stego_mri.png'; a.click();
+}
+
+function dlSideInfo() {
+  if (!S.e.side_info) return;
+  const blob = new Blob([JSON.stringify(S.e.side_info)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'side_info.json'; a.click();
+}
+
+// ── EXTRACT ────────────────────────────────────────────────────────
+async function doExtract() {
+  hideAlert('al-x-err'); hideAlert('al-x-ok');
+  if (!S.x.b64)       { showAlert('al-x-err','Upload a stego MRI image.'); return }
+  if (!S.x.side_info) { showAlert('al-x-err','Upload side_info.json.'); return }
+
+  document.getElementById('btn-x').disabled = true;
+  document.getElementById('ld-x').classList.add('show');
+  document.getElementById('extract-out').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/extract', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ image: S.x.b64, side_info: S.x.side_info })
+    });
+    const d = await resp.json();
+    if (d.status !== 'success') throw new Error(d.message);
+
+    document.getElementById('x-txt').textContent = d.extracted_text || '(empty)';
+    document.getElementById('x-meta').textContent =
+      `${d.n_bits.toLocaleString()} bits · ${d.n_pixels.toLocaleString()} pixels modified · T1=${d.T1.toFixed(2)} T2=${d.T2.toFixed(2)}`;
+    document.getElementById('xs-img').src = `data:image/png;base64,${S.x.b64}`;
+    document.getElementById('xr-img').src = `data:image/png;base64,${d.recovered_image}`;
+
+    document.getElementById('extract-out').style.display = 'block';
+    showAlert('al-x-ok', '✅ Data extracted. Original image recovered pixel-perfectly.');
+
+  } catch(e) {
+    showAlert('al-x-err', '❌ ' + e.message);
+  } finally {
+    document.getElementById('btn-x').disabled = false;
+    document.getElementById('ld-x').classList.remove('show');
+  }
+}
+
+function copyTxt() {
+  navigator.clipboard.writeText(document.getElementById('x-txt').textContent)
+    .then(() => alert('Copied to clipboard!'));
+}
+function dlTxt() {
+  const a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' +
+           encodeURIComponent(document.getElementById('x-txt').textContent);
+  a.download = 'extracted_patient_data.txt'; a.click();
+}
+
+// ── CAPACITY ───────────────────────────────────────────────────────
+async function doCap() {
+  if (!S.c.b64) { alert('Upload an MRI image first.'); return }
+  const T1 = parseFloat(document.getElementById('sl-ct1').value);
+  const T2 = parseFloat(document.getElementById('sl-ct2').value);
+  document.getElementById('cap-out').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/capacity', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ image: S.c.b64, T1, T2 })
+    });
+    const d = await resp.json();
+
+    document.getElementById('c-t1b').textContent  = d.tier1_bits.toLocaleString();
+    document.getElementById('c-t2b').textContent  = d.tier2_bits.toLocaleString();
+    document.getElementById('c-t3b').textContent  = d.tier3_bits.toLocaleString();
+    document.getElementById('c-total').textContent = d.total_bits.toLocaleString();
+    document.getElementById('c-chars').textContent = d.total_chars.toLocaleString();
+    document.getElementById('c-status').innerHTML = d.exceeds_85k
+      ? `<span style="color:#58a65c">✅ Capacity <strong>${d.total_bits.toLocaleString()} bits</strong> — sufficient for 85,000+ bit patient records.</span>`
+      : `<span style="color:#f97">⚠️ Only ${d.total_bits.toLocaleString()} bits. Try adjusting T1/T2.</span>`;
+
+    document.getElementById('cap-out').style.display = 'block';
+  } catch(e) { alert('Error: ' + e.message) }
+}
+</script>
+</body>
+</html>
+
